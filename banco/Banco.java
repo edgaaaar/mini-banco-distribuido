@@ -2,12 +2,6 @@ import com.sun.net.httpserver.*;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyFactory;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -65,7 +59,7 @@ public class Banco {
         server.createContext("/api/accounts/", Banco::manejarGetCuenta);
         server.createContext("/api/transactions/transfer", Banco::manejarTransferencia);
         server.createContext("/api/estado", Banco::manejarEstado);
-        server.createContext("/api/sincronizar", Banco::manejarSincronizar);
+        server.createContext("/api/replicar", Banco::manejarReplicar);
 
         server.setExecutor(Executors.newFixedThreadPool(10));
         server.start();
@@ -210,6 +204,39 @@ public class Banco {
         }
     }
 
+    private static void manejarReplicar(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equals("POST")) {
+            enviarRespuesta(exchange, 405, "Método no permitido");
+            return;
+        }
+
+        String body = leerBody(exchange);
+        Map<String, String> datos = parsearJson(body);
+        int sourceId = Integer.parseInt(datos.get("sourceAccountId"));
+        int targetId = Integer.parseInt(datos.get("targetAccountId"));
+        double amount = Double.parseDouble(datos.get("amount"));
+        int txId = Integer.parseInt(datos.get("txId"));
+
+        synchronized (lockTransacciones) {
+            Cuenta source = cuentas.get(sourceId);
+            Cuenta target = cuentas.get(targetId);
+
+            if (source != null && target != null && source.balance >= amount) {
+                source.balance -= amount;
+                target.balance += amount;
+                numeroTransaccion = Math.max(numeroTransaccion, txId);
+
+                String logEntry = txId + "|" + sourceId + "|" + targetId + "|" + amount;
+                logTransacciones.add(logEntry);
+                guardarLogTransaccion(logEntry);
+
+                enviarRespuesta(exchange, 200, "{\"mensaje\":\"replicado\"}");
+            } else {
+                enviarRespuesta(exchange, 400, "{\"error\":\"no se pudo replicar\"}");
+            }
+        }
+    }
+
     private static void manejarEstado(HttpExchange exchange) throws IOException {
         double totalBalance = cuentas.values().stream().mapToDouble(c -> c.balance).sum();
         int numCuentas = cuentas.size();
@@ -222,45 +249,17 @@ public class Banco {
         enviarRespuesta(exchange, 200, json);
     }
 
-    private static void manejarSincronizar(HttpExchange exchange) throws IOException {
-        if (!exchange.getRequestMethod().equals("POST")) {
-            enviarRespuesta(exchange, 405, "Método no permitido");
-            return;
-        }
-
-        String body = leerBody(exchange);
-        Map<String, String> datos = parsearJson(body);
-        int desdeTransaccion = Integer.parseInt(datos.getOrDefault("desdeTransaccion", "0"));
-
-        List<String> transaccionesNecesarias = new ArrayList<>();
-        for (String log : logTransacciones) {
-            int txId = Integer.parseInt(log.split("\\|")[0]);
-            if (txId > desdeTransaccion) {
-                transaccionesNecesarias.add(log);
-            }
-        }
-
-        StringBuilder json = new StringBuilder("{\"transacciones\":[");
-        for (int i = 0; i < transaccionesNecesarias.size(); i++) {
-            if (i > 0) json.append(",");
-            String[] partes = transaccionesNecesarias.get(i).split("\\|");
-            json.append("{\"id\":").append(partes[0]).append(",\"source\":").append(partes[1])
-                    .append(",\"target\":").append(partes[2]).append(",\"amount\":").append(partes[3]).append("}");
-        }
-        json.append("]}");
-
-        enviarRespuesta(exchange, 200, json.toString());
-    }
-
     private static void replicarTransferencia(int sourceId, int targetId, double amount, int txId) {
         for (String nodo : otrosNodos) {
             new Thread(() -> {
                 try {
-                    URL url = new URL(nodo + "/api/sincronizar");
+                    URL url = new URL(nodo + "/api/replicar");
                     HttpURLConnection con = (HttpURLConnection) url.openConnection();
                     con.setRequestMethod("POST");
                     con.setRequestProperty("Content-Type", "application/json");
                     con.setDoOutput(true);
+                    con.setConnectTimeout(3000);
+                    con.setReadTimeout(3000);
 
                     String json = "{\"sourceAccountId\":\"" + sourceId + "\",\"targetAccountId\":\"" + targetId
                             + "\",\"amount\":" + amount + ",\"txId\":" + txId + "}";
@@ -268,7 +267,6 @@ public class Banco {
                     con.getResponseCode();
                     con.disconnect();
                 } catch (Exception e) {
-                    System.out.println("Error replicando en " + nodo + ": " + e.getMessage());
                 }
             }).start();
         }
@@ -278,7 +276,6 @@ public class Banco {
         try (FileWriter fw = new FileWriter(rutaLogs + ".txt", true)) {
             fw.write(entrada + "\n");
         } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 
@@ -306,7 +303,6 @@ public class Banco {
                     }
                 }
             } catch (IOException e) {
-                e.printStackTrace();
             }
         }
     }
