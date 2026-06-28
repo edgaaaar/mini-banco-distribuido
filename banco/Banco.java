@@ -40,18 +40,22 @@ public class Banco {
         rutaLogs = "logs_nodo_" + nodoId;
 
         if (nodoId == 1) {
-            otrosNodos.add("http://localhost:7001");
-            otrosNodos.add("http://localhost:7002");
+            otrosNodos.add("http://34.27.89.27:7001");
+            otrosNodos.add("http://34.63.19.199:7002");
         } else if (nodoId == 2) {
-            otrosNodos.add("http://localhost:7000");
-            otrosNodos.add("http://localhost:7002");
+            otrosNodos.add("http://35.238.193.18:7000");
+            otrosNodos.add("http://34.63.19.199:7002");
         } else if (nodoId == 3) {
-            otrosNodos.add("http://localhost:7000");
-            otrosNodos.add("http://localhost:7001");
+            otrosNodos.add("http://35.238.193.18:7000");
+            otrosNodos.add("http://34.27.89.27:7001");
         }
 
         cargarCuentas(archivoCsv);
         cargarLogTransacciones();
+
+        if (nodoId != 1) {
+            sincronizarConLider();
+        }
 
         HttpServer server = HttpServer.create(new InetSocketAddress(puerto), 0);
         server.createContext("/api/register", Banco::manejarRegister);
@@ -60,6 +64,7 @@ public class Banco {
         server.createContext("/api/transactions/transfer", Banco::manejarTransferencia);
         server.createContext("/api/estado", Banco::manejarEstado);
         server.createContext("/api/replicar", Banco::manejarReplicar);
+        server.createContext("/api/sincronizar", Banco::manejarSincronizar);
 
         server.setExecutor(Executors.newFixedThreadPool(10));
         server.start();
@@ -237,6 +242,36 @@ public class Banco {
         }
     }
 
+    private static void manejarSincronizar(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equals("POST")) {
+            enviarRespuesta(exchange, 405, "Método no permitido");
+            return;
+        }
+
+        String body = leerBody(exchange);
+        Map<String, String> datos = parsearJson(body);
+        int desdeTransaccion = Integer.parseInt(datos.getOrDefault("desdeTransaccion", "0"));
+
+        List<String> transaccionesNecesarias = new ArrayList<>();
+        for (String log : logTransacciones) {
+            int txId = Integer.parseInt(log.split("\\|")[0]);
+            if (txId > desdeTransaccion) {
+                transaccionesNecesarias.add(log);
+            }
+        }
+
+        StringBuilder json = new StringBuilder("{\"transacciones\":[");
+        for (int i = 0; i < transaccionesNecesarias.size(); i++) {
+            if (i > 0) json.append(",");
+            String[] partes = transaccionesNecesarias.get(i).split("\\|");
+            json.append("{\"id\":").append(partes[0]).append(",\"source\":").append(partes[1])
+                    .append(",\"target\":").append(partes[2]).append(",\"amount\":").append(partes[3]).append("}");
+        }
+        json.append("]}");
+
+        enviarRespuesta(exchange, 200, json.toString());
+    }
+
     private static void manejarEstado(HttpExchange exchange) throws IOException {
         double totalBalance = cuentas.values().stream().mapToDouble(c -> c.balance).sum();
         int numCuentas = cuentas.size();
@@ -269,6 +304,114 @@ public class Banco {
                 } catch (Exception e) {
                 }
             }).start();
+        }
+    }
+
+    private static void sincronizarConLider() {
+        System.out.println("Nodo " + nodoId + " sincronizándose con líder...");
+        
+        int miUltimoTxId = obtenerUltimoTxIdDelLog();
+        System.out.println("Último txId en mi log: " + miUltimoTxId);
+        
+        try {
+            URL url = new URL("http://35.238.193.18:7000/api/sincronizar");
+            HttpURLConnection con = (HttpURLConnection) url.openConnection();
+            con.setRequestMethod("POST");
+            con.setRequestProperty("Content-Type", "application/json");
+            con.setDoOutput(true);
+            con.setConnectTimeout(5000);
+            con.setReadTimeout(5000);
+            
+            String json = "{\"desdeTransaccion\":" + miUltimoTxId + "}";
+            con.getOutputStream().write(json.getBytes());
+            
+            int codigoRespuesta = con.getResponseCode();
+            if (codigoRespuesta == 200) {
+                BufferedReader br = new BufferedReader(new InputStreamReader(con.getInputStream()));
+                StringBuilder respuesta = new StringBuilder();
+                String linea;
+                while ((linea = br.readLine()) != null) {
+                    respuesta.append(linea);
+                }
+                br.close();
+                
+                aplicarTransaccionesDelLider(respuesta.toString());
+                System.out.println("Sincronización completada. Transacciones aplicadas: " + (numeroTransaccion - miUltimoTxId));
+            } else {
+                System.out.println("Error en sincronización. Código: " + codigoRespuesta);
+            }
+            con.disconnect();
+        } catch (Exception e) {
+            System.out.println("No se pudo sincronizar con líder: " + e.getMessage());
+        }
+    }
+
+    private static int obtenerUltimoTxIdDelLog() {
+        int maxTxId = 0;
+        File file = new File(rutaLogs + ".txt");
+        if (file.exists()) {
+            try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+                String linea;
+                while ((linea = br.readLine()) != null) {
+                    String[] partes = linea.split("\\|");
+                    if (partes.length >= 1) {
+                        int txId = Integer.parseInt(partes[0]);
+                        maxTxId = Math.max(maxTxId, txId);
+                    }
+                }
+            } catch (IOException e) {
+            }
+        }
+        return maxTxId;
+    }
+
+    private static void aplicarTransaccionesDelLider(String jsonRespuesta) {
+        try {
+            String cleanJson = jsonRespuesta.replace("{\"transacciones\":[", "").replace("]}", "");
+            
+            if (cleanJson.trim().isEmpty()) {
+                System.out.println("No hay transacciones nuevas para sincronizar.");
+                return;
+            }
+            
+            String[] transacciones = cleanJson.split("\\},\\{");
+            
+            for (String tx : transacciones) {
+                tx = tx.replace("{", "").replace("}", "");
+                
+                Map<String, String> datos = new HashMap<>();
+                String[] pares = tx.split(",");
+                for (String par : pares) {
+                    String[] keyValue = par.split(":");
+                    if (keyValue.length == 2) {
+                        String key = keyValue[0].replace("\"", "").trim();
+                        String value = keyValue[1].replace("\"", "").trim();
+                        datos.put(key, value);
+                    }
+                }
+                
+                int txId = Integer.parseInt(datos.get("id"));
+                int sourceId = Integer.parseInt(datos.get("source"));
+                int targetId = Integer.parseInt(datos.get("target"));
+                double amount = Double.parseDouble(datos.get("amount"));
+                
+                synchronized (lockTransacciones) {
+                    Cuenta source = cuentas.get(sourceId);
+                    Cuenta target = cuentas.get(targetId);
+                    
+                    if (source != null && target != null && source.balance >= amount) {
+                        source.balance -= amount;
+                        target.balance += amount;
+                        numeroTransaccion = Math.max(numeroTransaccion, txId);
+                        
+                        String logEntry = txId + "|" + sourceId + "|" + targetId + "|" + amount;
+                        logTransacciones.add(logEntry);
+                        guardarLogTransaccion(logEntry);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("Error aplicando transacciones del líder: " + e.getMessage());
         }
     }
 
