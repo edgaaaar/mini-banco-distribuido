@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class GeneradorCarga {
     private static String token = "";
-    private static Map<Integer, Double> saldosIniciales = new HashMap<>();
+    private static double saldoInicial = 0;
     private static AtomicInteger lecturaExitosa = new AtomicInteger(0);
     private static AtomicInteger transferenciasExitosa = new AtomicInteger(0);
     private static AtomicInteger errorLectura = new AtomicInteger(0);
@@ -30,10 +30,8 @@ public class GeneradorCarga {
         System.out.println("Login...");
         login();
 
-        System.out.println("Obteniendo saldos iniciales...");
-        obtenerSaldosIniciales();
-        double saldoInicial = saldosIniciales.values().stream().mapToDouble(Double::doubleValue).sum();
-        System.out.println("Saldo total inicial: $" + saldoInicial);
+        System.out.println("Obteniendo saldo inicial...");
+        obtenerSaldoInicial();
 
         System.out.println("\nIniciando prueba de 60 segundos...");
         ejecutarPrueba();
@@ -45,7 +43,7 @@ public class GeneradorCarga {
         System.out.println("Errores en transferencias: " + errorTransferencia.get());
 
         System.out.println("\nVerificando consistencia...");
-        verificarConsistencia(saldoInicial);
+        verificarConsistencia();
     }
 
     private static void cargarCuentas(String archivo) {
@@ -119,35 +117,34 @@ public class GeneradorCarga {
         con.disconnect();
     }
 
-    private static void obtenerSaldosIniciales() throws Exception {
-        for (int id : idsValidos) {
-            try {
-                URL url = new URL(urlBase + "/api/accounts/" + id);
-                HttpURLConnection con = (HttpURLConnection) url.openConnection();
-                con.setRequestMethod("GET");
-                con.setRequestProperty("Authorization", "Bearer " + token);
-                con.setConnectTimeout(3000);
-                con.setReadTimeout(3000);
+    private static void obtenerSaldoInicial() throws Exception {
+        try {
+            URL url = new URL(urlBase + "/api/estado");
+            HttpURLConnection con = (HttpURLConnection) url.openConnection();
+            con.setRequestMethod("GET");
+            con.setConnectTimeout(3000);
+            con.setReadTimeout(3000);
 
-                int codigoRespuesta = con.getResponseCode();
-                if (codigoRespuesta == 200) {
-                    BufferedReader br = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                    StringBuilder respuesta = new StringBuilder();
-                    String linea;
-                    while ((linea = br.readLine()) != null) {
-                        respuesta.append(linea);
-                    }
-                    br.close();
-
-                    String resp = respuesta.toString();
-                    int inicio = resp.indexOf("\"balance\":") + 10;
-                    int fin = resp.indexOf("}", inicio);
-                    double balance = Double.parseDouble(resp.substring(inicio, fin).trim());
-                    saldosIniciales.put(id, balance);
+            int codigoRespuesta = con.getResponseCode();
+            if (codigoRespuesta == 200) {
+                BufferedReader br = new BufferedReader(new InputStreamReader(con.getInputStream()));
+                StringBuilder respuesta = new StringBuilder();
+                String linea;
+                while ((linea = br.readLine()) != null) {
+                    respuesta.append(linea);
                 }
-                con.disconnect();
-            } catch (Exception e) {
+                br.close();
+
+                String resp = respuesta.toString();
+                int inicio = resp.indexOf("\"saldoTotal\":") + 13;
+                int fin = resp.indexOf(",", inicio);
+                if (fin == -1) fin = resp.indexOf("}", inicio);
+                saldoInicial = Double.parseDouble(resp.substring(inicio, fin).trim());
+                System.out.println("Saldo total inicial: $" + saldoInicial);
             }
+            con.disconnect();
+        } catch (Exception e) {
+            System.out.println("Error obteniendo saldo inicial");
         }
     }
 
@@ -235,45 +232,41 @@ public class GeneradorCarga {
         }
     }
 
-    private static void verificarConsistencia(double saldoInicial) {
+    private static void verificarConsistencia() {
         try {
-            double saldoFinal = 0;
-            for (int id : idsValidos) {
-                URL url = new URL(urlBase + "/api/accounts/" + id);
-                HttpURLConnection con = (HttpURLConnection) url.openConnection();
-                con.setRequestMethod("GET");
-                con.setRequestProperty("Authorization", "Bearer " + token);
-                con.setConnectTimeout(3000);
-                con.setReadTimeout(3000);
+            URL url = new URL(urlBase + "/api/estado");
+            HttpURLConnection con = (HttpURLConnection) url.openConnection();
+            con.setRequestMethod("GET");
+            con.setConnectTimeout(3000);
+            con.setReadTimeout(3000);
 
-                int codigoRespuesta = con.getResponseCode();
-                if (codigoRespuesta == 200) {
-                    BufferedReader br = new BufferedReader(new InputStreamReader(con.getInputStream()));
-                    StringBuilder respuesta = new StringBuilder();
-                    String linea;
-                    while ((linea = br.readLine()) != null) {
-                        respuesta.append(linea);
-                    }
-                    br.close();
-
-                    String resp = respuesta.toString();
-                    int inicio = resp.indexOf("\"balance\":") + 10;
-                    int fin = resp.indexOf("}", inicio);
-                    double balance = Double.parseDouble(resp.substring(inicio, fin).trim());
-                    saldoFinal += balance;
+            int codigoRespuesta = con.getResponseCode();
+            if (codigoRespuesta == 200) {
+                BufferedReader br = new BufferedReader(new InputStreamReader(con.getInputStream()));
+                StringBuilder respuesta = new StringBuilder();
+                String linea;
+                while ((linea = br.readLine()) != null) {
+                    respuesta.append(linea);
                 }
-                con.disconnect();
-            }
+                br.close();
 
-            System.out.println("Saldo total final: $" + saldoFinal);
+                String resp = respuesta.toString();
+                int inicio = resp.indexOf("\"saldoTotal\":") + 13;
+                int fin = resp.indexOf(",", inicio);
+                if (fin == -1) fin = resp.indexOf("}", inicio);
+                double saldoFinal = Double.parseDouble(resp.substring(inicio, fin).trim());
 
-            if (Math.abs(saldoFinal - saldoInicial) < 0.01) {
-                System.out.println("✓ Consistencia verificada. Los saldos coinciden.");
-                System.out.println("\nScore: " + (transferenciasExitosa.get() * 4 + lecturaExitosa.get()));
-            } else {
-                System.out.println("✗ INCONSISTENCIA DETECTADA!");
-                System.out.println("Diferencia: $" + (saldoFinal - saldoInicial));
+                System.out.println("Saldo total final: $" + saldoFinal);
+
+                if (Math.abs(saldoFinal - saldoInicial) < 0.01) {
+                    System.out.println("✓ Consistencia verificada. Los saldos coinciden.");
+                    System.out.println("\nScore final: " + (transferenciasExitosa.get() * 4 + lecturaExitosa.get()));
+                } else {
+                    System.out.println("✗ INCONSISTENCIA DETECTADA!");
+                    System.out.println("Diferencia: $" + (saldoFinal - saldoInicial));
+                }
             }
+            con.disconnect();
         } catch (Exception e) {
             System.out.println("Error verificando consistencia: " + e.getMessage());
         }
