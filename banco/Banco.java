@@ -40,15 +40,15 @@ public class Banco {
         rutaLogs = "logs_nodo_" + nodoId;
 
         if (nodoId == 1) {
-    otrosNodos.add("http://104.197.204.112:7001");
-    otrosNodos.add("http://35.222.11.189:7002");
-} else if (nodoId == 2) {
-    otrosNodos.add("http://35.188.28.110:7000");
-    otrosNodos.add("http://35.222.11.189:7002");
-} else if (nodoId == 3) {
-    otrosNodos.add("http://35.188.28.110:7000");
-    otrosNodos.add("http://104.197.204.112:7001");
-}
+            otrosNodos.add("http://104.197.204.112:7001");
+            otrosNodos.add("http://35.222.11.189:7002");
+        } else if (nodoId == 2) {
+            otrosNodos.add("http://35.188.28.110:7000");
+            otrosNodos.add("http://35.222.11.189:7002");
+        } else if (nodoId == 3) {
+            otrosNodos.add("http://35.188.28.110:7000");
+            otrosNodos.add("http://104.197.204.112:7001");
+        }
 
         cargarCuentas(archivoCsv);
         cargarLogTransacciones();
@@ -293,15 +293,20 @@ public class Banco {
                     con.setRequestMethod("POST");
                     con.setRequestProperty("Content-Type", "application/json");
                     con.setDoOutput(true);
-                    con.setConnectTimeout(3000);
-                    con.setReadTimeout(3000);
+                    con.setConnectTimeout(5000);
+                    con.setReadTimeout(5000);
 
                     String json = "{\"sourceAccountId\":\"" + sourceId + "\",\"targetAccountId\":\"" + targetId
                             + "\",\"amount\":" + amount + ",\"txId\":" + txId + "}";
                     con.getOutputStream().write(json.getBytes());
-                    con.getResponseCode();
+                    
+                    int codigoRespuesta = con.getResponseCode();
+                    if (codigoRespuesta != 200) {
+                        System.out.println("WARNING: Replicacion fallida a " + nodo + " - Codigo: " + codigoRespuesta);
+                    }
                     con.disconnect();
                 } catch (Exception e) {
+                    System.out.println("ERROR: No se pudo replicar a " + nodo + ": " + e.getMessage());
                 }
             }).start();
         }
