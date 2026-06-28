@@ -13,7 +13,7 @@ public class GeneradorCarga {
     private static AtomicInteger transferenciasExitosa = new AtomicInteger(0);
     private static AtomicInteger errorLectura = new AtomicInteger(0);
     private static AtomicInteger errorTransferencia = new AtomicInteger(0);
-    private static String urlBase = "http://localhost:7000";
+    private static String urlBase = "http://35.188.28.110:7000";
     private static List<Integer> idsValidos = new ArrayList<>();
     private static Random random = new Random();
 

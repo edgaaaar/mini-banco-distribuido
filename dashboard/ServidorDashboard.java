@@ -8,12 +8,12 @@ import java.util.concurrent.Executors;
 
 public class ServidorDashboard {
     public static void main(String[] args) throws Exception {
-        HttpServer server = HttpServer.create(new InetSocketAddress(8081), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
         server.createContext("/", ServidorDashboard::manejarGetDashboard);
         server.createContext("/api/estado-nodos", ServidorDashboard::manejarEstadoNodos);
         server.setExecutor(Executors.newFixedThreadPool(5));
         server.start();
-        System.out.println("Dashboard iniciado en http://localhost:8081");
+        System.out.println("Dashboard iniciado en http://localhost:8080");
     }
 
     private static void manejarGetDashboard(HttpExchange exchange) throws IOException {
@@ -33,9 +33,10 @@ public class ServidorDashboard {
     private static void manejarEstadoNodos(HttpExchange exchange) throws IOException {
         StringBuilder respuesta = new StringBuilder("{\"nodos\":[");
 
+        String[] ips = {"35.188.28.110", "104.197.204.112", "35.222.11.189"};
         for (int i = 0; i < 3; i++) {
             int puerto = 7000 + i;
-            String estado = obtenerEstadoNodo("http://localhost:" + puerto);
+            String estado = obtenerEstadoNodo("http://" + ips[i] + ":" + puerto);
             if (i > 0) respuesta.append(",");
             respuesta.append(estado);
         }
