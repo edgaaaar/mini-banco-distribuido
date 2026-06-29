@@ -40,14 +40,14 @@ public class Banco {
         rutaLogs = "logs_nodo_" + nodoId;
 
         if (nodoId == 1) {
-            otrosNodos.add("http://104.197.204.112:7001");
-            otrosNodos.add("http://35.222.11.189:7002");
+            otrosNodos.add("http://35.253.60.248:7001");
+            otrosNodos.add("http://34.45.169.190:7002");
         } else if (nodoId == 2) {
-            otrosNodos.add("http://35.188.28.110:7000");
-            otrosNodos.add("http://35.222.11.189:7002");
+            otrosNodos.add("http://136.112.140.202:7000");
+            otrosNodos.add("http://34.45.169.190:7002");
         } else if (nodoId == 3) {
-            otrosNodos.add("http://35.188.28.110:7000");
-            otrosNodos.add("http://104.197.204.112:7001");
+            otrosNodos.add("http://136.112.140.202:7000");
+            otrosNodos.add("http://35.253.60.248:7001");
         }
 
         cargarCuentas(archivoCsv);
@@ -319,7 +319,7 @@ public class Banco {
         System.out.println("Último txId en mi log: " + miUltimoTxId);
         
         try {
-            URL url = new URL("http://35.188.28.110:7000/api/sincronizar");
+            URL url = new URL("http://136.112.140.202:7000/api/sincronizar");
             HttpURLConnection con = (HttpURLConnection) url.openConnection();
             con.setRequestMethod("POST");
             con.setRequestProperty("Content-Type", "application/json");
