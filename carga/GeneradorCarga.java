@@ -148,25 +148,12 @@ public class GeneradorCarga {
         }
     }
 
-    private static void ejecutarPrueba() throws InterruptedException {
-        ExecutorService executor = Executors.newFixedThreadPool(20);
-        long tiempoInicio = System.currentTimeMillis();
-        long tiempoFin = tiempoInicio + 60000;
-
-        while (System.currentTimeMillis() < tiempoFin) {
-            executor.submit(() -> {
-                int operacion = random.nextInt(100);
-                if (operacion < 80) {
-                    hacerLectura();
-                } else {
-                    hacerTransferencia();
-                }
-            });
-        }
-
-        executor.shutdown();
-        executor.awaitTermination(65, TimeUnit.SECONDS);
-    }
+private static void ejecutarPrueba() throws InterruptedException {
+    System.out.println("Realizando transferencia");
+    hacerTransferencia();
+    System.out.println("Transferencia completada.");
+    Thread.sleep(3000);
+}
 
     private static void hacerLectura() {
         try {
@@ -202,8 +189,8 @@ public class GeneradorCarga {
                 return;
             }
 
-            double amount = random.nextDouble() * 1 + 1;
-            amount = Math.round(amount * 1.0) / 1.0;
+            double amount = random.nextDouble() * 100 + 1;
+            amount = Math.round(amount * 100.0) / 100.0;
 
             String json = "{\"sourceAccountId\":\"" + source + "\",\"targetAccountId\":\"" + target + "\",\"amount\":" + amount + "}";
             URL url = new URL(urlBase + "/api/transactions/transfer");
