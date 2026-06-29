@@ -33,7 +33,7 @@ public class ServidorDashboard {
     private static void manejarEstadoNodos(HttpExchange exchange) throws IOException {
         StringBuilder respuesta = new StringBuilder("{\"nodos\":[");
 
-        String[] ips = {"35.188.28.110", "104.197.204.112", "35.222.11.189"};
+        String[] ips = {"136.112.140.202", "35.253.60.248", "34.45.169.190"};
         for (int i = 0; i < 3; i++) {
             int puerto = 7000 + i;
             String estado = obtenerEstadoNodo("http://" + ips[i] + ":" + puerto);
