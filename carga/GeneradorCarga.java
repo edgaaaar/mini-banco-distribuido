@@ -212,8 +212,8 @@ public class GeneradorCarga {
             con.setRequestProperty("Content-Type", "application/json");
             con.setRequestProperty("Authorization", "Bearer " + token);
             con.setDoOutput(true);
-            con.setConnectTimeout(3000);
-            con.setReadTimeout(3000);
+            con.setConnectTimeout(60000);
+            con.setReadTimeout(60000);
 
             con.getOutputStream().write(json.getBytes());
             int codigoRespuesta = con.getResponseCode();
