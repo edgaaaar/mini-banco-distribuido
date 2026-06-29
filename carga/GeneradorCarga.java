@@ -202,8 +202,8 @@ public class GeneradorCarga {
                 return;
             }
 
-            double amount = random.nextDouble() * 100 + 1;
-            amount = Math.round(amount * 100.0) / 100.0;
+            double amount = random.nextDouble() * 1 + 1;
+            amount = Math.round(amount * 1.0) / 1.0;
 
             String json = "{\"sourceAccountId\":\"" + source + "\",\"targetAccountId\":\"" + target + "\",\"amount\":" + amount + "}";
             URL url = new URL(urlBase + "/api/transactions/transfer");
