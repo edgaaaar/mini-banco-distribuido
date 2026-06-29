@@ -259,10 +259,10 @@ public class GeneradorCarga {
                 System.out.println("Saldo total final: $" + saldoFinal);
 
                 if (Math.abs(saldoFinal - saldoInicial) < 0.01) {
-                    System.out.println("✓ Consistencia verificada. Los saldos coinciden.");
+                    System.out.println("Consistencia verificada. Los saldos coinciden.");
                     System.out.println("\nScore final: " + (transferenciasExitosa.get() * 4 + lecturaExitosa.get()));
                 } else {
-                    System.out.println("✗ INCONSISTENCIA DETECTADA!");
+                    System.out.println("INCONSISTENCIA DETECTADA!");
                     System.out.println("Diferencia: $" + (saldoFinal - saldoInicial));
                 }
             }
